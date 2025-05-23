@@ -1,0 +1,11 @@
+
+{
+  "level": "debug",
+  "log_to_file": true,
+  "log_to_json": false,
+  "file_path": "server.log",
+  "max_size": 10,
+  "max_backups": 5,
+  "max_age": 30,
+  "compress": true
+}

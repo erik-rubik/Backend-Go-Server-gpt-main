@@ -1,0 +1,193 @@
+<!-- rounds.html -->
+<!-- Displays round history, including messages and winners for each round. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Round History</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .round-container {
+            margin-bottom: 30px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+        }
+        .round-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .message-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .message-item {
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            background-color: #f5f5f5;
+        }
+        .winner {
+            background-color: #e6f7e6;
+            border-left: 4px solid #4CAF50;
+        }
+        .username {
+            font-weight: bold;
+            color: #0066cc;
+        }
+        .content {
+            margin-top: 5px;
+        }
+        .no-messages {
+            color: #999;
+            font-style: italic;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/">Home</a>
+        <a href="/rounds.html">Round History</a>
+    </div>
+
+    <h1>Round History</h1>
+    
+    <div class="controls">
+        <input type="text" id="round-id" placeholder="Enter Round ID">
+        <button id="load-round-btn">Load Round</button>
+        <button id="load-current-btn">Load Current Round</button>
+    </div>
+    
+    <div id="round-display">
+        <p class="loading">Enter a Round ID to load messages.</p>
+    </div>
+
+    <script>
+        // DOM elements
+        const roundIdInput = document.getElementById('round-id');
+        const loadRoundBtn = document.getElementById('load-round-btn');
+        const loadCurrentBtn = document.getElementById('load-current-btn');
+        const roundDisplay = document.getElementById('round-display');
+        
+        // Check for round ID in URL query parameters
+        function checkUrlParams() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roundId = urlParams.get('round');
+            
+            if (roundId) {
+                roundIdInput.value = roundId;
+                loadRound(roundId);
+            } else {
+                // Check if there's a current round ID in localStorage
+                const storedRoundId = localStorage.getItem('currentRoundId');
+                if (storedRoundId) {
+                    roundIdInput.value = storedRoundId;
+                }
+            }
+        }
+        
+        // Load round data
+        async function loadRound(roundId) {
+            roundDisplay.innerHTML = '<p class="loading">Loading round data...</p>';
+            
+            try {
+                const response = await fetch(`/api/rounds/${roundId}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                
+                const data = await response.json();
+                displayRound(data);
+            } catch (error) {
+                console.error('Error loading round data:', error);
+                roundDisplay.innerHTML = `<p class="error">Error loading round data: ${error.message}</p>`;
+            }
+        }
+        
+        // Display round data
+        function displayRound(data) {
+            if (!data || !data.round_id) {
+                roundDisplay.innerHTML = '<p class="error">Invalid round data received.</p>';
+                return;
+            }
+            
+            let html = `
+                <div class="round-container">
+                    <div class="round-header">
+                        <h2>Round ID: ${data.round_id}</h2>
+                        <div>Messages: ${data.count}</div>
+                    </div>
+            `;
+            
+            if (data.messages && data.messages.length > 0) {
+                html += '<ul class="message-list">';
+                
+                data.messages.forEach(message => {
+                    const isWinner = data.winner && 
+                                    data.winner.Username === message.Username && 
+                                    data.winner.Content === message.Content;
+                    
+                    html += `
+                        <li class="message-item ${isWinner ? 'winner' : ''}">
+                            <div class="username">${message.Username} ${isWinner ? '(Winner)' : ''}</div>
+                            <div class="content">${message.Content}</div>
+                        </li>
+                    `;
+                });
+                
+                html += '</ul>';
+            } else {
+                html += '<p class="no-messages">No messages found for this round.</p>';
+            }
+            
+            html += '</div>';
+            roundDisplay.innerHTML = html;
+        }
+        
+        // Initialize page
+        checkUrlParams();
+        
+        // Event listeners
+        loadRoundBtn.addEventListener('click', () => {
+            const roundId = roundIdInput.value.trim();
+            if (roundId) {
+                loadRound(roundId);
+            } else {
+                roundDisplay.innerHTML = '<p class="error">Please enter a Round ID.</p>';
+            }
+        });
+        
+        loadCurrentBtn.addEventListener('click', async () => {
+            // Try to get the current round ID from localStorage
+            const storedRoundId = localStorage.getItem('currentRoundId');
+            
+            if (storedRoundId) {
+                // Use the stored round ID
+                roundIdInput.value = storedRoundId;
+                loadRound(storedRoundId);
+            } else {
+                // Fallback to current timestamp if no stored round ID
+                const currentRoundId = Date.now();
+                roundIdInput.value = currentRoundId;
+                loadRound(currentRoundId);
+            }
+        });
+        
+        // Allow pressing Enter in the input field
+        roundIdInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                loadRoundBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>

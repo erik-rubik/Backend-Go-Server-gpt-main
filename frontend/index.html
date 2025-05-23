@@ -1,0 +1,222 @@
+<!-- index.html -->
+<!-- Main web client interface for connecting to the WebSocket server, sending/receiving messages, and interacting with the chat. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Client</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        #messages {
+            height: 300px;
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        #status {
+            margin-bottom: 10px;
+            padding: 5px;
+            background-color: #f0f0f0;
+        }
+        #message-input {
+            width: 70%;
+        }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/">Home</a>
+        <a href="/rounds.html">Round History</a>
+    </div>
+
+    <h1>WebSocket Message Client</h1>
+    
+    <div id="login-form">
+        <h2>Enter Username</h2>
+        <input type="text" id="username-input" placeholder="Username">
+        <button id="connect-btn">Connect</button>
+    </div>
+    
+    <div id="chat-container" style="display: none;">
+        <h2>Messages</h2>
+        <div id="status">Disconnected</div>
+        <div id="messages"></div>
+        
+        <div id="input-container">
+            <input type="text" id="message-input" placeholder="Type your message here" disabled>
+            <button id="send-btn" disabled>Send</button>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const loginForm = document.getElementById('login-form');
+        const chatContainer = document.getElementById('chat-container');
+        const usernameInput = document.getElementById('username-input');
+        const connectBtn = document.getElementById('connect-btn');
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        
+        // WebSocket connection
+        let socket = null;
+        let username = '';
+        let roundActive = false;
+        let currentRoundId = null; // Store the current round ID
+        
+        // Connect to WebSocket
+        connectBtn.addEventListener('click', () => {
+            username = usernameInput.value.trim();
+            if (!username) {
+                alert('Please enter a username');
+                return;
+            }
+            
+            // Create WebSocket connection
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws?username=${encodeURIComponent(username)}`;
+            
+            socket = new WebSocket(wsUrl);
+            
+            // WebSocket event handlers
+            socket.onopen = () => {
+                statusDiv.textContent = 'Connected';
+                loginForm.style.display = 'none';
+                chatContainer.style.display = 'block';
+                addMessage('System', 'Connected to server', 'round-info');
+            };
+            
+            socket.onclose = () => {
+                statusDiv.textContent = 'Disconnected';
+                addMessage('System', 'Disconnected from server', 'error');
+                setTimeout(() => {
+                    loginForm.style.display = 'block';
+                    chatContainer.style.display = 'none';
+                }, 2000);
+            };
+            
+            socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                addMessage('System', 'WebSocket error', 'error');
+            };
+            
+            socket.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    handleMessage(message);
+                } catch (error) {
+                    console.error('Error parsing message:', error);
+                    addMessage('System', 'Error parsing message', 'error');
+                }
+            };
+        });
+        
+        // Send message
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        function sendMessage() {
+            if (!socket || socket.readyState !== WebSocket.OPEN || !roundActive) {
+                return;
+            }
+            
+            const message = messageInput.value.trim();
+            if (!message) {
+                return;
+            }
+            
+            // Create message object
+            const messageObj = {
+                version: '1.0',
+                type: 'client_message',
+                username: username,
+                data: message
+            };
+            
+            // Send message
+            socket.send(JSON.stringify(messageObj));
+            messageInput.value = '';
+        }
+        
+        // Handle incoming messages
+        function handleMessage(message) {
+            console.log('Received message:', message);
+            
+            switch (message.type) {
+                case 'round_info':
+                    if (message.data.includes('started')) {
+                        roundActive = true;
+                        messageInput.disabled = false;
+                        sendBtn.disabled = false;
+                        
+                        // Try to extract round ID from the message data
+                        // This assumes the server is publishing the round ID in the message
+                        // If not, we'll use the current timestamp as a fallback
+                        try {
+                            // Store the current round ID in localStorage for cross-page access
+                            currentRoundId = Date.now(); // Fallback
+                            localStorage.setItem('currentRoundId', currentRoundId);
+                            
+                            // Add a link to view this round
+                            const roundLink = document.createElement('a');
+                            roundLink.href = `/rounds.html?round=${currentRoundId}`;
+                            roundLink.textContent = 'View this round';
+                            roundLink.style.marginLeft = '10px';
+                            roundLink.style.fontSize = '0.8em';
+                            
+                            const messageElement = document.createElement('div');
+                            messageElement.className = 'round-info';
+                            messageElement.textContent = `System: ${message.data}`;
+                            messageElement.appendChild(roundLink);
+                            messagesDiv.appendChild(messageElement);
+                            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                            return; // Skip the normal addMessage call
+                        } catch (e) {
+                            console.error('Error storing round ID:', e);
+                        }
+                    } else if (message.data.includes('ended')) {
+                        roundActive = false;
+                        messageInput.disabled = true;
+                        sendBtn.disabled = true;
+                    }
+                    addMessage('System', message.data, 'round-info');
+                    break;
+                    
+                case 'countdown':
+                    statusDiv.textContent = `Round active - ${message.data} seconds remaining`;
+                    break;
+                    
+                case 'selected_text':
+                    addMessage('System', message.data, 'selected-text');
+                    break;
+                    
+                case 'error':
+                    addMessage('Error', message.data, 'error');
+                    break;
+                    
+                case 'ack':
+                    addMessage('System', 'Message sent successfully', 'ack');
+                    break;
+                    
+                default:
+                    addMessage('System', `Unknown message type: ${message.type}`, 'error');
+            }
+        }
+        
+        // Add message to messages div
+        function addMessage(sender, text, className) {
+            const messageElement = document.createElement('div');
+            messageElement.className = className;
+            messageElement.textContent = `${sender}: ${text}`;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html>
