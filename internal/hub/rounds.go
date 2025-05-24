@@ -6,22 +6,24 @@ import (
 	"time"
 )
 
+const (
+	roundDuration         = 30 * time.Second
+	countdownStartSeconds = 10
+)
+
 // StartRoundTimer starts the round management timer.
 func (h *Hub) StartRoundTimer() {
-	ticker := time.NewTicker(30 * time.Second) // 30-second rounds
+	ticker := time.NewTicker(roundDuration)
 	defer ticker.Stop()
 
 	// Start first round immediately
 	h.StartRound()
 
-	for {
-		select {
-		case <-ticker.C:
-			if h.RoundActive {
-				h.EndRound()
-			} else {
-				h.StartRound()
-			}
+	for range ticker.C { // Changed from for { select { ... } }
+		if h.RoundActive {
+			h.EndRound()
+		} else {
+			h.StartRound()
 		}
 	}
 }
@@ -38,7 +40,7 @@ func (h *Hub) StartRound() {
 	roundMessage := map[string]interface{}{
 		"version": "1.0",
 		"type":    "round_info",
-		"data":    fmt.Sprintf("Round %d started! You have 30 seconds to submit a message.", h.CurrentRoundID),
+		"data":    fmt.Sprintf("Round %d started! You have %.0f seconds to submit a message.", h.CurrentRoundID, roundDuration.Seconds()),
 	}
 
 	h.BroadcastMessage(roundMessage)
@@ -79,7 +81,7 @@ func (h *Hub) EndRound() {
 
 // StartCountdown sends countdown messages to clients.
 func (h *Hub) StartCountdown() {
-	for i := 10; i >= 1; i-- {
+	for i := countdownStartSeconds; i >= 1; i-- {
 		h.Mu.Lock()
 		roundActive := h.RoundActive
 		h.Mu.Unlock()

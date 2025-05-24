@@ -13,18 +13,27 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+const (
+	defaultNatsURL          = nats.DefaultURL
+	jetstreamRetention      = 30 * time.Minute
+	apiConsumerMaxDeliver   = 1
+	apiConsumerFetchMaxWait = 2 * time.Second
+	winnerAPIFetchMaxWait   = 1 * time.Second
+	apiConsumerPrefix       = "API_CONSUMER_"
+)
+
 // StartServer starts the websocket and HTTP server.
 func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.JetStreamContext, *logger.Logger) interface{}) {
 	// Connect to NATS using environment variable or default URL
 	natsURL := os.Getenv("NATS_URL")
 	if natsURL == "" {
-		natsURL = nats.DefaultURL
+		natsURL = defaultNatsURL
 	}
 
 	serverLogger.Infof("Connecting to NATS at %s", natsURL)
 	nc, err := nats.Connect(natsURL)
 	if err != nil {
-		serverLogger.Errorf("Error connecting to NATS: %v", err)
+		serverLogger.Errorf("Error connecting to NATS: %w", err) // Wrapped error
 		nc = nil
 		serverLogger.Warn("Running without NATS connection. Message persistence will be disabled.")
 	} else {
@@ -42,8 +51,7 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 			js = jsContext
 			serverLogger.Info("Successfully connected to JetStream")
 
-			// Set up JetStream streams with 30-minute retention
-			retention := 30 * time.Minute
+			// Set up JetStream streams with configurable retention
 			streams := []struct {
 				Name     string
 				Subjects []string
@@ -57,20 +65,20 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 					Name:     s.Name,
 					Subjects: s.Subjects,
 					Storage:  nats.FileStorage,
-					MaxAge:   retention,
+					MaxAge:   jetstreamRetention,
 				}
 				_, err := js.StreamInfo(streamConfig.Name)
 				if err != nil {
 					_, err = js.AddStream(streamConfig)
 					if err != nil {
-						serverLogger.Errorf("Error creating stream %s: %v", s.Name, err)
+						serverLogger.Errorf("Error creating stream %s: %w", s.Name, err) // Wrapped error
 					} else {
 						serverLogger.Infof("Created stream: %s", s.Name)
 					}
 				} else {
 					_, err = js.UpdateStream(streamConfig)
 					if err != nil {
-						serverLogger.Errorf("Error updating stream %s: %v", s.Name, err)
+						serverLogger.Errorf("Error updating stream %s: %w", s.Name, err) // Wrapped error
 					} else {
 						serverLogger.Infof("Updated stream: %s", s.Name)
 					}
@@ -111,22 +119,27 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 		}
 		roundID := path[len("/api/rounds/"):]
 		subject := fmt.Sprintf("messages.%s", roundID)
-		consumerName := fmt.Sprintf("API_CONSUMER_%d", time.Now().UnixNano())
+
+		// Use a more descriptive and potentially durable consumer name if appropriate
+		// For now, keeping it dynamic but with a clear prefix and ensuring it's cleaned up.
+		consumerName := fmt.Sprintf("%s%s_%d", apiConsumerPrefix, roundID, time.Now().UnixNano())
+
 		_, err := js.AddConsumer("MESSAGES", &nats.ConsumerConfig{
 			Name:          consumerName,
 			DeliverPolicy: nats.DeliverAllPolicy,
-			AckPolicy:     nats.AckExplicitPolicy, FilterSubject: subject,
-			MaxDeliver: 1,
+			AckPolicy:     nats.AckExplicitPolicy,
+			FilterSubject: subject,
+			MaxDeliver:    apiConsumerMaxDeliver,
 		})
 		if err != nil {
-			serverLogger.Errorf("Error creating consumer: %v", err)
+			serverLogger.Errorf("Error creating consumer %s for subject %s: %w", consumerName, subject, err) // Wrapped error
 			http.Error(w, "Error retrieving messages", http.StatusInternalServerError)
 			return
 		}
-		sub, err := js.PullSubscribe(subject, consumerName)
+		sub, err := js.PullSubscribe(subject, consumerName) // Using the created consumer name
 		if err != nil {
-			serverLogger.Errorf("Error subscribing: %v", err)
-			js.DeleteConsumer("MESSAGES", consumerName)
+			serverLogger.Errorf("Error subscribing with consumer %s to subject %s: %w", consumerName, subject, err) // Wrapped error
+			js.DeleteConsumer("MESSAGES", consumerName)                                                             // Attempt cleanup
 			http.Error(w, "Error retrieving messages", http.StatusInternalServerError)
 			return
 		}
@@ -134,16 +147,16 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 		// Ensure cleanup happens even if other operations fail
 		defer func() {
 			if unsubErr := sub.Unsubscribe(); unsubErr != nil {
-				serverLogger.Errorf("Error unsubscribing: %v", unsubErr)
+				serverLogger.Errorf("Error unsubscribing consumer %s: %w", consumerName, unsubErr) // Wrapped error
 			}
 			if delErr := js.DeleteConsumer("MESSAGES", consumerName); delErr != nil {
-				serverLogger.Errorf("Error deleting consumer %s: %v", consumerName, delErr)
+				serverLogger.Errorf("Error deleting consumer %s: %w", consumerName, delErr) // Wrapped error
 			}
 		}()
 
-		msgs, err := sub.Fetch(100, nats.MaxWait(2*time.Second))
+		msgs, err := sub.Fetch(100, nats.MaxWait(apiConsumerFetchMaxWait)) // Use constant
 		if err != nil && err != nats.ErrTimeout {
-			serverLogger.Errorf("Error fetching messages: %v", err)
+			serverLogger.Errorf("Error fetching messages with consumer %s: %w", consumerName, err) // Wrapped error
 			http.Error(w, "Error retrieving messages", http.StatusInternalServerError)
 			return
 		}
@@ -151,25 +164,56 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 		for _, msg := range msgs {
 			var message map[string]interface{}
 			if err := json.Unmarshal(msg.Data, &message); err != nil {
-				serverLogger.Errorf("Error unmarshaling message: %v", err)
+				serverLogger.Errorf("Error unmarshaling message: %w", err) // Wrapped error
 				continue
 			}
 			messages = append(messages, message)
-			msg.Ack()
+			msg.Ack() // Ack individual messages as they are processed
 		}
+
 		var winner map[string]interface{}
-		winnerSub, err := js.PullSubscribe(fmt.Sprintf("winners.%s", roundID), "")
-		if err == nil {
-			winnerMsgs, err := winnerSub.Fetch(1, nats.MaxWait(1*time.Second))
-			if err == nil && len(winnerMsgs) > 0 {
-				var winnerMsg map[string]interface{}
-				if err := json.Unmarshal(winnerMsgs[0].Data, &winnerMsg); err == nil {
-					winner = winnerMsg
+		// For fetching winner, using an ephemeral pull subscriber is generally fine if we only need the latest.
+		// If multiple API calls could happen concurrently for the same round before a winner is published,
+		// and each needs to see the winner, this approach is okay.
+		// If a durable view of the winner is needed across multiple API calls even if they are spaced out,
+		// a named consumer for winners might be considered, but for now, this is simpler.
+		winnerSubject := fmt.Sprintf("winners.%s", roundID)
+		winnerConsumerName := fmt.Sprintf("API_WINNER_CONSUMER_%s_%d", roundID, time.Now().UnixNano())
+
+		// Create a consumer for the winner message
+		_, err = js.AddConsumer("WINNERS", &nats.ConsumerConfig{
+			Name:          winnerConsumerName,
+			DeliverPolicy: nats.DeliverAllPolicy, // Or DeliverLastPolicy if only the most recent winner matters
+			AckPolicy:     nats.AckExplicitPolicy,
+			FilterSubject: winnerSubject,
+			MaxDeliver:    1, // Only attempt to deliver once to this ephemeral consumer
+		})
+
+		if err != nil {
+			serverLogger.Warnf("Error creating winner consumer %s for subject %s: %v. Winner might not be retrieved.", winnerConsumerName, winnerSubject, err)
+		} else {
+			defer js.DeleteConsumer("WINNERS", winnerConsumerName) // Cleanup winner consumer
+
+			winnerSub, err := js.PullSubscribe(winnerSubject, winnerConsumerName)
+			if err != nil {
+				serverLogger.Warnf("Error subscribing for winner with consumer %s: %v. Winner might not be retrieved.", winnerConsumerName, err)
+			} else {
+				defer winnerSub.Unsubscribe()
+				winnerMsgs, fetchErr := winnerSub.Fetch(1, nats.MaxWait(winnerAPIFetchMaxWait)) // Use constant
+				if fetchErr != nil && fetchErr != nats.ErrTimeout {
+					serverLogger.Warnf("Error fetching winner message with consumer %s: %v", winnerConsumerName, fetchErr)
+				} else if len(winnerMsgs) > 0 {
+					var winnerMsg map[string]interface{}
+					if unmarshalErr := json.Unmarshal(winnerMsgs[0].Data, &winnerMsg); unmarshalErr == nil {
+						winner = winnerMsg
+						winnerMsgs[0].Ack() // Ack the winner message
+					} else {
+						serverLogger.Errorf("Error unmarshaling winner message: %w", unmarshalErr)
+					}
 				}
-				winnerMsgs[0].Ack()
 			}
-			winnerSub.Unsubscribe()
 		}
+
 		response := map[string]interface{}{
 			"round_id":  roundID,
 			"messages":  messages,

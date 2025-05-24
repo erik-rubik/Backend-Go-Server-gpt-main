@@ -8,9 +8,19 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	webSocketReadDeadline  = 60 * time.Second
+	webSocketWriteDeadline = 10 * time.Second
+	webSocketPingPeriod    = (webSocketReadDeadline * 9) / 10 // Must be less than readDeadline
+)
+
 var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // In production, enforce CORS.
+		// TODO: Implement proper origin check for production
+		// For development, allow all origins
+		return true
 	},
 }
 
@@ -53,9 +63,10 @@ func (h *Hub) ReadPump(client *Client) {
 	}()
 
 	// Set read deadline and pong handler
-	client.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	client.Conn.SetReadLimit(512) // Max message size
+	client.Conn.SetReadDeadline(time.Now().Add(webSocketReadDeadline))
 	client.Conn.SetPongHandler(func(string) error {
-		client.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		client.Conn.SetReadDeadline(time.Now().Add(webSocketReadDeadline))
 		return nil
 	})
 
@@ -76,7 +87,7 @@ func (h *Hub) ReadPump(client *Client) {
 
 // WritePump writes messages to the WebSocket connection.
 func (h *Hub) WritePump(client *Client) {
-	ticker := time.NewTicker(54 * time.Second)
+	ticker := time.NewTicker(webSocketPingPeriod)
 	defer func() {
 		ticker.Stop()
 		client.Conn.Close()
@@ -85,8 +96,9 @@ func (h *Hub) WritePump(client *Client) {
 	for {
 		select {
 		case message, ok := <-client.Send:
-			client.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			client.Conn.SetWriteDeadline(time.Now().Add(webSocketWriteDeadline))
 			if !ok {
+				// The hub closed the channel.
 				client.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
@@ -109,9 +121,9 @@ func (h *Hub) WritePump(client *Client) {
 			}
 
 		case <-ticker.C:
-			client.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			client.Conn.SetWriteDeadline(time.Now().Add(webSocketWriteDeadline))
 			if err := client.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
+				return // Client connection is likely broken
 			}
 		}
 	}

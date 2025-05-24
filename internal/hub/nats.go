@@ -10,6 +10,13 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+const (
+	winnerSelectionDelay         = 1 * time.Second // Reduced delay, assuming NATS persistence is fast
+	maxMessagesToFetchForWinner  = 200             // Increased limit for fetching messages for winner selection
+	winnerSelectorConsumerPrefix = "WINNER_SELECTOR_"
+	winnerFetchMaxWait           = 2 * time.Second
+)
+
 // publishMessageToNATS publishes a client message to NATS
 func (h *Hub) publishMessageToNATS(client *Client, content string) {
 	if h.NatsConn != nil && h.Js != nil {
@@ -71,13 +78,15 @@ func (h *Hub) publishRoundEndToNATS(roundID int64) {
 
 // SelectWinner selects a random winner from the submitted messages.
 func (h *Hub) SelectWinner(roundID int64) {
-	// Give some time for processing
-	time.Sleep(2 * time.Second)
+	// Give a very short time for NATS to process, if necessary.
+	// Ideally, NATS operations are fast enough that this might not be strictly needed,
+	// but it can prevent race conditions in some edge cases.
+	time.Sleep(winnerSelectionDelay)
 
 	// Fetch messages from NATS to select a winner
 	if h.NatsConn != nil && h.Js != nil {
 		subject := fmt.Sprintf("messages.%d", roundID)
-		consumerName := fmt.Sprintf("WINNER_SELECTOR_%d", time.Now().UnixNano())
+		consumerName := fmt.Sprintf("%s%d_%d", winnerSelectorConsumerPrefix, roundID, time.Now().UnixNano())
 
 		// Create a consumer for this round's messages
 		_, err := h.Js.AddConsumer("MESSAGES", &nats.ConsumerConfig{
@@ -85,28 +94,37 @@ func (h *Hub) SelectWinner(roundID int64) {
 			DeliverPolicy: nats.DeliverAllPolicy,
 			AckPolicy:     nats.AckExplicitPolicy,
 			FilterSubject: subject,
-			MaxDeliver:    1,
+			MaxDeliver:    1, // We'll process these messages once here for winner selection
 		})
 		if err != nil {
-			h.Logger.Errorf("Error creating winner selection consumer: %v", err)
+			h.Logger.Errorf("Error creating winner selection consumer %s: %w", consumerName, err)
 			return
 		}
 
 		// Subscribe and fetch messages
 		sub, err := h.Js.PullSubscribe(subject, consumerName)
 		if err != nil {
-			h.Logger.Errorf("Error subscribing for winner selection: %v", err)
-			h.Js.DeleteConsumer("MESSAGES", consumerName)
+			h.Logger.Errorf("Error subscribing for winner selection with consumer %s: %w", consumerName, err)
+			h.Js.DeleteConsumer("MESSAGES", consumerName) // Attempt cleanup
 			return
 		}
 
-		// Fetch all messages for this round
-		msgs, err := sub.Fetch(100, nats.MaxWait(2*time.Second))
-		sub.Unsubscribe()
-		h.Js.DeleteConsumer("MESSAGES", consumerName)
+		// It's important to unsubscribe and delete the consumer.
+		defer func() {
+			if unsubErr := sub.Unsubscribe(); unsubErr != nil {
+				h.Logger.Warnf("Error unsubscribing winner selector %s: %v", consumerName, unsubErr)
+			}
+			if delErr := h.Js.DeleteConsumer("MESSAGES", consumerName); delErr != nil {
+				h.Logger.Warnf("Error deleting winner selector consumer %s: %v", consumerName, delErr)
+			}
+		}()
+
+		// Fetch messages for this round. Consider fetching in batches if rounds can have extremely large numbers of messages.
+		// For now, fetching up to maxMessagesToFetchForWinner.
+		msgs, err := sub.Fetch(maxMessagesToFetchForWinner, nats.MaxWait(winnerFetchMaxWait))
 
 		if err != nil && err != nats.ErrTimeout {
-			h.Logger.Errorf("Error fetching messages for winner selection: %v", err)
+			h.Logger.Errorf("Error fetching messages for winner selection with consumer %s: %w", consumerName, err)
 			return
 		}
 

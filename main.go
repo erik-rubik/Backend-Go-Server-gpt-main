@@ -40,7 +40,7 @@ func main() {
 
 	// Initialize random number generator (Go 1.20+ compatible)
 	randSource := rand.NewSource(time.Now().UnixNano())
-	_ = rand.New(randSource)
+	_ = rand.New(randSource) // Assign to _ to indicate it's used for side effects (seeding the created generator)
 
 	// Use the new modularized API and Hub packages
 	api.StartServer(serverLogger, func(nc *nats.Conn, js nats.JetStreamContext, logger *logger.Logger) interface{} {
