@@ -1,14 +1,12 @@
-// message.go
-// Contains data structures for messages exchanged between clients and server, including WebSocket and API message formats.
-package main
+// internal/message/message.go
+// Contains data structures for messages exchanged between clients and server.
+package message
 
-// Message represents a valid message for the current round.
 type Message struct {
 	Username string `json:"username"`
 	Content  string `json:"content"`
 }
 
-// ClientMessage represents a message sent from a client.
 type ClientMessage struct {
 	Version  string `json:"version"`
 	Type     string `json:"type"`
@@ -16,7 +14,6 @@ type ClientMessage struct {
 	Data     string `json:"data"`
 }
 
-// LogEntry represents a structured log entry.
 type LogEntry struct {
 	Timestamp string `json:"timestamp"`
 	Event     string `json:"event"`
@@ -25,7 +22,6 @@ type LogEntry struct {
 	Detail    string `json:"detail,omitempty"`
 }
 
-// WSMessage represents a structured websocket message sent by the server.
 type WSMessage struct {
 	Version   string `json:"version"`
 	Type      string `json:"type"`

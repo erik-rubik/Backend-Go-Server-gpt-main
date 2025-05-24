@@ -1,6 +1,6 @@
-// api.go
-// Main server logic: sets up HTTP and WebSocket endpoints, connects to NATS/JetStream, manages message streams, and exposes API endpoints for WebSocket, round history, and health checks.
-package main
+// internal/api/api.go
+// Provides StartServer and HTTP API logic as a package.
+package api
 
 import (
 	"encoding/json"
@@ -9,11 +9,12 @@ import (
 	"os"
 	"time"
 
+	"github.com/erilali/internal/logger"
 	"github.com/nats-io/nats.go"
 )
 
 // StartServer starts the websocket and HTTP server.
-func StartServer() {
+func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.JetStreamContext, *logger.Logger) interface{}) {
 	// Connect to NATS using environment variable or default URL
 	natsURL := os.Getenv("NATS_URL")
 	if natsURL == "" {
@@ -77,12 +78,25 @@ func StartServer() {
 			}
 		}
 	}
+	hub := hubFactory(nc, js, serverLogger)
 
-	hub := NewHub(nc, js)
-	go hub.Run()
+	// Validate that hub implements required interfaces
+	hubRunner, ok := hub.(interface{ Run() })
+	if !ok {
+		serverLogger.Fatal("Hub does not implement Run() method")
+	}
+
+	hubServer, ok := hub.(interface {
+		ServeWs(http.ResponseWriter, *http.Request)
+	})
+	if !ok {
+		serverLogger.Fatal("Hub does not implement ServeWs method")
+	}
+
+	go hubRunner.Run()
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		hub.serveWs(w, r)
+		hubServer.ServeWs(w, r)
 	})
 
 	http.HandleFunc("/api/rounds/", func(w http.ResponseWriter, r *http.Request) {
@@ -101,9 +115,8 @@ func StartServer() {
 		_, err := js.AddConsumer("MESSAGES", &nats.ConsumerConfig{
 			Name:          consumerName,
 			DeliverPolicy: nats.DeliverAllPolicy,
-			AckPolicy:     nats.AckExplicitPolicy,
-			FilterSubject: subject,
-			MaxDeliver:    1,
+			AckPolicy:     nats.AckExplicitPolicy, FilterSubject: subject,
+			MaxDeliver: 1,
 		})
 		if err != nil {
 			serverLogger.Errorf("Error creating consumer: %v", err)
@@ -113,35 +126,45 @@ func StartServer() {
 		sub, err := js.PullSubscribe(subject, consumerName)
 		if err != nil {
 			serverLogger.Errorf("Error subscribing: %v", err)
+			js.DeleteConsumer("MESSAGES", consumerName)
 			http.Error(w, "Error retrieving messages", http.StatusInternalServerError)
 			return
 		}
-		defer sub.Unsubscribe()
-		defer js.DeleteConsumer("MESSAGES", consumerName)
+
+		// Ensure cleanup happens even if other operations fail
+		defer func() {
+			if unsubErr := sub.Unsubscribe(); unsubErr != nil {
+				serverLogger.Errorf("Error unsubscribing: %v", unsubErr)
+			}
+			if delErr := js.DeleteConsumer("MESSAGES", consumerName); delErr != nil {
+				serverLogger.Errorf("Error deleting consumer %s: %v", consumerName, delErr)
+			}
+		}()
+
 		msgs, err := sub.Fetch(100, nats.MaxWait(2*time.Second))
 		if err != nil && err != nats.ErrTimeout {
 			serverLogger.Errorf("Error fetching messages: %v", err)
 			http.Error(w, "Error retrieving messages", http.StatusInternalServerError)
 			return
 		}
-		var messages []*Message
+		var messages []map[string]interface{}
 		for _, msg := range msgs {
-			var message Message
+			var message map[string]interface{}
 			if err := json.Unmarshal(msg.Data, &message); err != nil {
 				serverLogger.Errorf("Error unmarshaling message: %v", err)
 				continue
 			}
-			messages = append(messages, &message)
+			messages = append(messages, message)
 			msg.Ack()
 		}
-		var winner *Message
+		var winner map[string]interface{}
 		winnerSub, err := js.PullSubscribe(fmt.Sprintf("winners.%s", roundID), "")
 		if err == nil {
 			winnerMsgs, err := winnerSub.Fetch(1, nats.MaxWait(1*time.Second))
 			if err == nil && len(winnerMsgs) > 0 {
-				var winnerMsg Message
+				var winnerMsg map[string]interface{}
 				if err := json.Unmarshal(winnerMsgs[0].Data, &winnerMsg); err == nil {
-					winner = &winnerMsg
+					winner = winnerMsg
 				}
 				winnerMsgs[0].Ack()
 			}
@@ -164,11 +187,9 @@ func StartServer() {
 			natsStatus = "connected"
 		}
 		health := map[string]interface{}{
-			"status":      "ok",
-			"nats":        natsStatus,
-			"uptime":      time.Since(hub.startTime).String(),
-			"connections": len(hub.clients),
-			"version":     "1.0.0",
+			"status":  "ok",
+			"nats":    natsStatus,
+			"version": "1.0.0",
 		}
 		if js != nil {
 			jsInfo := make(map[string]interface{})

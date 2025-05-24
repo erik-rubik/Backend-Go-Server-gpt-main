@@ -1,16 +1,15 @@
-// util.go
-// Utility functions, such as loading logger configuration from a JSON file.
-package main
+// internal/util/util.go
+package util
 
 import (
 	"encoding/json"
 	"os"
 
-	"github.com/erilali/logger"
+	"github.com/erilali/internal/logger"
 )
 
-// loadLoggerConfig loads the logger configuration from a JSON file
-func loadLoggerConfig(filePath string) (logger.LogConfig, error) {
+// LoadLoggerConfig loads the logger configuration from a JSON file
+func LoadLoggerConfig(filePath string) (logger.LogConfig, error) {
 	config := logger.DefaultLogConfig()
 	file, err := os.Open(filePath)
 	if err != nil {
