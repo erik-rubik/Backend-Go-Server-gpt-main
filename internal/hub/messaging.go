@@ -6,7 +6,8 @@ import (
 	"strings"
 )
 
-// validateUsername checks if the username is valid
+// validateUsername checks if the provided username is valid according to predefined rules.
+// Rules include length constraints (3-20 characters) and character set (alphanumeric and underscore).
 func validateUsername(username string) bool {
 	// Check length (3-20 characters)
 	if len(username) < 3 || len(username) > 20 {
@@ -26,7 +27,8 @@ func validateUsername(username string) bool {
 	return true
 }
 
-// validateMessageContent checks if message content is valid
+// validateMessageContent checks if the provided message content is valid.
+// It trims leading/trailing whitespace and then checks length constraints (1-500 characters).
 func validateMessageContent(content string) bool {
 	// Trim whitespace
 	content = strings.TrimSpace(content)
@@ -35,7 +37,9 @@ func validateMessageContent(content string) bool {
 	return len(content) >= 1 && len(content) <= 500
 }
 
-// HandleClientMessage processes incoming messages from clients.
+// HandleClientMessage processes incoming messages from a connected client.
+// It first determines the message type and then routes it to the appropriate handler.
+// For "client_message" type, it performs checks for active round, submission limits, and message validity before processing.
 func (h *Hub) HandleClientMessage(client *Client, message map[string]interface{}) {
 	messageType, ok := message["type"].(string)
 	if !ok {
@@ -77,7 +81,9 @@ func (h *Hub) HandleClientMessage(client *Client, message map[string]interface{}
 	}
 }
 
-// ProcessMessage handles a valid client message during an active round.
+// ProcessMessage takes a valid client message during an active round, sends an acknowledgment
+// to the client, publishes the message to NATS for persistence and further processing,
+// and logs the message.
 func (h *Hub) ProcessMessage(client *Client, content string) {
 	// Send acknowledgment
 	h.SendAckMessage(client)
@@ -88,7 +94,9 @@ func (h *Hub) ProcessMessage(client *Client, content string) {
 	h.Logger.Infof("Message from %s: %s", client.Username, content)
 }
 
-// SendErrorMessage sends an error message to a specific client.
+// SendErrorMessage constructs and sends an error message to a specific client.
+// The error message includes a version, type ("error"), and the error details.
+// If sending fails, it closes the client's send channel and removes the client from the hub.
 func (h *Hub) SendErrorMessage(client *Client, errorMsg string) {
 	message := map[string]interface{}{
 		"version": "1.0",
@@ -108,7 +116,9 @@ func (h *Hub) SendErrorMessage(client *Client, errorMsg string) {
 	}
 }
 
-// SendAckMessage sends an acknowledgment message to a specific client.
+// SendAckMessage constructs and sends an acknowledgment message to a specific client.
+// This is typically sent after a client's message has been successfully received and initially processed.
+// If sending fails, it closes the client's send channel and removes the client from the hub.
 func (h *Hub) SendAckMessage(client *Client) {
 	message := map[string]interface{}{
 		"version": "1.0",
@@ -128,7 +138,8 @@ func (h *Hub) SendAckMessage(client *Client) {
 	}
 }
 
-// BroadcastMessage sends a message to all connected clients.
+// BroadcastMessage marshals a given message map into JSON and sends it to the hub's broadcast channel.
+// This channel is then read by the hub's Run loop to distribute the message to all connected clients.
 func (h *Hub) BroadcastMessage(message map[string]interface{}) {
 	if data, err := json.Marshal(message); err == nil {
 		h.Broadcast <- data

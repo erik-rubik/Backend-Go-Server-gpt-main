@@ -17,7 +17,10 @@ const (
 	winnerFetchMaxWait           = 2 * time.Second
 )
 
-// publishMessageToNATS publishes a client message to NATS
+// publishMessageToNATS serializes client message data (username, content, timestamp, round_id)
+// into JSON and publishes it to a NATS JetStream subject.
+// The subject is dynamically created based on the current round ID (e.g., "messages.ROUND_ID").
+// Errors during marshaling or publishing are logged.
 func (h *Hub) publishMessageToNATS(client *Client, content string) {
 	if h.NatsConn != nil && h.Js != nil {
 		messageData := map[string]interface{}{
@@ -38,7 +41,10 @@ func (h *Hub) publishMessageToNATS(client *Client, content string) {
 	}
 }
 
-// publishRoundStartToNATS publishes round start event to NATS
+// publishRoundStartToNATS serializes round start event data (round_id, timestamp, status)
+// into JSON and publishes it to a NATS JetStream subject.
+// The subject is dynamically created based on the current round ID (e.g., "rounds.started.ROUND_ID").
+// Errors during marshaling or publishing are logged.
 func (h *Hub) publishRoundStartToNATS() {
 	if h.NatsConn != nil && h.Js != nil {
 		subject := fmt.Sprintf("rounds.started.%d", h.CurrentRoundID)
@@ -57,7 +63,10 @@ func (h *Hub) publishRoundStartToNATS() {
 	}
 }
 
-// publishRoundEndToNATS publishes round end event to NATS
+// publishRoundEndToNATS serializes round end event data (round_id, timestamp, status)
+// into JSON and publishes it to a NATS JetStream subject.
+// The subject is dynamically created based on the provided round ID (e.g., "rounds.ended.ROUND_ID").
+// Errors during marshaling or publishing are logged.
 func (h *Hub) publishRoundEndToNATS(roundID int64) {
 	if h.NatsConn != nil && h.Js != nil {
 		subject := fmt.Sprintf("rounds.ended.%d", roundID)
@@ -76,7 +85,14 @@ func (h *Hub) publishRoundEndToNATS(roundID int64) {
 	}
 }
 
-// SelectWinner selects a random winner from the submitted messages.
+// SelectWinner orchestrates the process of selecting a winner for a given round.
+// It introduces a small delay for NATS processing, then fetches messages for the round from NATS JetStream
+// using a temporary, uniquely named consumer.
+// If messages are found, it randomly selects one, acknowledges all fetched messages,
+// publishes the winner information to a NATS subject ("winners.ROUND_ID"),
+// and broadcasts the winner announcement to all connected clients.
+// If no messages are found, or if NATS is unavailable, appropriate fallback messages are broadcast.
+// The temporary consumer is cleaned up afterwards.
 func (h *Hub) SelectWinner(roundID int64) {
 	// Give a very short time for NATS to process, if necessary.
 	// Ideally, NATS operations are fast enough that this might not be strictly needed,
@@ -182,7 +198,10 @@ func (h *Hub) SelectWinner(roundID int64) {
 	}
 }
 
-// publishWinnerToNATS publishes winner data to NATS
+// publishWinnerToNATS serializes winner data (round_id, username, content, timestamp)
+// into JSON and publishes it to a NATS JetStream subject.
+// The subject is dynamically created based on the round ID (e.g., "winners.ROUND_ID").
+// Errors during marshaling or publishing are logged.
 func (h *Hub) publishWinnerToNATS(roundID int64, messageData map[string]interface{}) {
 	winnerData := map[string]interface{}{
 		"round_id":  roundID,

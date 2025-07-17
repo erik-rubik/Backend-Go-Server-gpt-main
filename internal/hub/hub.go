@@ -27,7 +27,9 @@ type Hub struct {
 	Logger         *logger.Logger  // custom logger
 }
 
-// NewHub creates a new Hub instance
+// NewHub creates a new Hub instance and initializes its fields.
+// It sets up channels for client registration, unregistration, and message broadcasting.
+// It also initializes NATS connection details, logger, and other hub-specific properties.
 func NewHub(nc *nats.Conn, js nats.JetStreamContext, logger *logger.Logger) *Hub {
 	return &Hub{
 		Clients:        make(map[*Client]bool),
@@ -44,7 +46,9 @@ func NewHub(nc *nats.Conn, js nats.JetStreamContext, logger *logger.Logger) *Hub
 	}
 }
 
-// Run handles registration, unregistration, and broadcasts for the hub.
+// Run starts the main event loop for the Hub.
+// It listens for new client registrations, client unregistrations, and messages to broadcast.
+// It also launches a goroutine to manage round timing.
 func (h *Hub) Run() {
 	// Start the round timer
 	go h.StartRoundTimer()

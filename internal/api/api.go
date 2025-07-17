@@ -33,7 +33,7 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 	serverLogger.Infof("Connecting to NATS at %s", natsURL)
 	nc, err := nats.Connect(natsURL)
 	if err != nil {
-		serverLogger.Errorf("Error connecting to NATS: %w", err) // Wrapped error
+		serverLogger.Errorf("Error connecting to NATS: %v", err) // Wrapped error
 		nc = nil
 		serverLogger.Warn("Running without NATS connection. Message persistence will be disabled.")
 	} else {
@@ -71,14 +71,14 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 				if err != nil {
 					_, err = js.AddStream(streamConfig)
 					if err != nil {
-						serverLogger.Errorf("Error creating stream %s: %w", s.Name, err) // Wrapped error
+						serverLogger.Errorf("Error creating stream %s: %v", s.Name, err) // Wrapped error
 					} else {
 						serverLogger.Infof("Created stream: %s", s.Name)
 					}
 				} else {
 					_, err = js.UpdateStream(streamConfig)
 					if err != nil {
-						serverLogger.Errorf("Error updating stream %s: %w", s.Name, err) // Wrapped error
+						serverLogger.Errorf("Error updating stream %s: %v", s.Name, err) // Wrapped error
 					} else {
 						serverLogger.Infof("Updated stream: %s", s.Name)
 					}
@@ -132,13 +132,13 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 			MaxDeliver:    apiConsumerMaxDeliver,
 		})
 		if err != nil {
-			serverLogger.Errorf("Error creating consumer %s for subject %s: %w", consumerName, subject, err) // Wrapped error
+			serverLogger.Errorf("Error creating consumer %s for subject %s: %v", consumerName, subject, err) // Wrapped error
 			http.Error(w, "Error retrieving messages", http.StatusInternalServerError)
 			return
 		}
 		sub, err := js.PullSubscribe(subject, consumerName) // Using the created consumer name
 		if err != nil {
-			serverLogger.Errorf("Error subscribing with consumer %s to subject %s: %w", consumerName, subject, err) // Wrapped error
+			serverLogger.Errorf("Error subscribing with consumer %s to subject %s: %v", consumerName, subject, err) // Wrapped error
 			js.DeleteConsumer("MESSAGES", consumerName)                                                             // Attempt cleanup
 			http.Error(w, "Error retrieving messages", http.StatusInternalServerError)
 			return
@@ -147,16 +147,16 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 		// Ensure cleanup happens even if other operations fail
 		defer func() {
 			if unsubErr := sub.Unsubscribe(); unsubErr != nil {
-				serverLogger.Errorf("Error unsubscribing consumer %s: %w", consumerName, unsubErr) // Wrapped error
+				serverLogger.Errorf("Error unsubscribing consumer %s: %v", consumerName, unsubErr) // Wrapped error
 			}
 			if delErr := js.DeleteConsumer("MESSAGES", consumerName); delErr != nil {
-				serverLogger.Errorf("Error deleting consumer %s: %w", consumerName, delErr) // Wrapped error
+				serverLogger.Errorf("Error deleting consumer %s: %v", consumerName, delErr) // Wrapped error
 			}
 		}()
 
 		msgs, err := sub.Fetch(100, nats.MaxWait(apiConsumerFetchMaxWait)) // Use constant
 		if err != nil && err != nats.ErrTimeout {
-			serverLogger.Errorf("Error fetching messages with consumer %s: %w", consumerName, err) // Wrapped error
+			serverLogger.Errorf("Error fetching messages with consumer %s: %v", consumerName, err) // Wrapped error
 			http.Error(w, "Error retrieving messages", http.StatusInternalServerError)
 			return
 		}
@@ -164,7 +164,7 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 		for _, msg := range msgs {
 			var message map[string]interface{}
 			if err := json.Unmarshal(msg.Data, &message); err != nil {
-				serverLogger.Errorf("Error unmarshaling message: %w", err) // Wrapped error
+				serverLogger.Errorf("Error unmarshaling message: %v", err) // Wrapped error
 				continue
 			}
 			messages = append(messages, message)
@@ -208,7 +208,7 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 						winner = winnerMsg
 						winnerMsgs[0].Ack() // Ack the winner message
 					} else {
-						serverLogger.Errorf("Error unmarshaling winner message: %w", unmarshalErr)
+						serverLogger.Errorf("Error unmarshaling winner message: %v", unmarshalErr)
 					}
 				}
 			}
