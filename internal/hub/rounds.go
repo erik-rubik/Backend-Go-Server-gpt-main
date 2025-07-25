@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	roundDuration         = 30 * time.Second
+	roundDuration         = 15 * time.Second
 	countdownStartSeconds = 10
 )
 
@@ -19,12 +19,10 @@ func (h *Hub) StartRoundTimer() {
 	// Start first round immediately
 	h.StartRound()
 
-	for range ticker.C { // Changed from for { select { ... } }
-		if h.RoundActive {
-			h.EndRound()
-		} else {
-			h.StartRound()
-		}
+	// End the current round and start a new one on each tick.
+	for range ticker.C {
+		h.EndRound()
+		h.StartRound()
 	}
 }
 

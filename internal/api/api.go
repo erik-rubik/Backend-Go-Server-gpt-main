@@ -261,9 +261,6 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 		json.NewEncoder(w).Encode(health)
 	})
 
-	fs := http.FileServer(http.Dir("frontend"))
-	http.Handle("/", fs)
-
 	addr := ":8080"
 	serverLogger.Infof("Server started at %s", addr)
 	if err := http.ListenAndServe(addr, nil); err != nil {

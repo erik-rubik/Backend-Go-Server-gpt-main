@@ -23,7 +23,7 @@ const (
 // Errors during marshaling or publishing are logged.
 func (h *Hub) publishMessageToNATS(client *Client, content string) {
 	if h.NatsConn != nil && h.Js != nil {
-		messageData := map[string]interface{}{
+		messageData := map[string]any{
 			"username":  client.Username,
 			"content":   content,
 			"timestamp": time.Now().Unix(),
@@ -48,7 +48,7 @@ func (h *Hub) publishMessageToNATS(client *Client, content string) {
 func (h *Hub) publishRoundStartToNATS() {
 	if h.NatsConn != nil && h.Js != nil {
 		subject := fmt.Sprintf("rounds.started.%d", h.CurrentRoundID)
-		roundData := map[string]interface{}{
+		roundData := map[string]any{
 			"round_id":  h.CurrentRoundID,
 			"timestamp": time.Now().Unix(),
 			"status":    "started",
@@ -70,7 +70,7 @@ func (h *Hub) publishRoundStartToNATS() {
 func (h *Hub) publishRoundEndToNATS(roundID int64) {
 	if h.NatsConn != nil && h.Js != nil {
 		subject := fmt.Sprintf("rounds.ended.%d", roundID)
-		roundData := map[string]interface{}{
+		roundData := map[string]any{
 			"round_id":  roundID,
 			"timestamp": time.Now().Unix(),
 			"status":    "ended",
@@ -113,14 +113,14 @@ func (h *Hub) SelectWinner(roundID int64) {
 			MaxDeliver:    1, // We'll process these messages once here for winner selection
 		})
 		if err != nil {
-			h.Logger.Errorf("Error creating winner selection consumer %s: %w", consumerName, err)
+			h.Logger.Errorf("Error creating winner selection consumer %s: %v", consumerName, err)
 			return
 		}
 
 		// Subscribe and fetch messages
 		sub, err := h.Js.PullSubscribe(subject, consumerName)
 		if err != nil {
-			h.Logger.Errorf("Error subscribing for winner selection with consumer %s: %w", consumerName, err)
+			h.Logger.Errorf("Error subscribing for winner selection with consumer %s: %v", consumerName, err)
 			h.Js.DeleteConsumer("MESSAGES", consumerName) // Attempt cleanup
 			return
 		}
@@ -140,13 +140,13 @@ func (h *Hub) SelectWinner(roundID int64) {
 		msgs, err := sub.Fetch(maxMessagesToFetchForWinner, nats.MaxWait(winnerFetchMaxWait))
 
 		if err != nil && err != nats.ErrTimeout {
-			h.Logger.Errorf("Error fetching messages for winner selection with consumer %s: %w", consumerName, err)
+			h.Logger.Errorf("Error fetching messages for winner selection with consumer %s: %v", consumerName, err)
 			return
 		}
 
 		if len(msgs) == 0 {
 			h.Logger.Infof("No messages found for round %d", roundID)
-			winnerMessage := map[string]interface{}{
+			winnerMessage := map[string]any{
 				"version": "1.0",
 				"type":    "selected_text",
 				"data":    "No messages submitted for this round.",
@@ -159,27 +159,22 @@ func (h *Hub) SelectWinner(roundID int64) {
 		selectedIdx := rand.Intn(len(msgs))
 		selectedMsg := msgs[selectedIdx]
 
-		var messageData map[string]interface{}
+		var messageData map[string]any
 		if err := json.Unmarshal(selectedMsg.Data, &messageData); err != nil {
 			h.Logger.Errorf("Error unmarshaling selected message: %v", err)
 			return
 		}
 
-		// Acknowledge the selected message
-		selectedMsg.Ack()
-
-		// Acknowledge remaining messages
-		for i, msg := range msgs {
-			if i != selectedIdx {
-				msg.Ack()
-			}
+		// Acknowledge all fetched messages so NATS doesn't redeliver them
+		for _, msg := range msgs {
+			msg.Ack()
 		}
 
-		// Store winner data in NATS
+		// Store winner data in NATS and broadcast to clients
 		h.publishWinnerToNATS(roundID, messageData)
 
 		// Broadcast winner announcement
-		winnerMessage := map[string]interface{}{
+		winnerMessage := map[string]any{
 			"version": "1.0",
 			"type":    "selected_text",
 			"data":    fmt.Sprintf("Winner: %s - %s", messageData["username"], messageData["content"]),
@@ -189,7 +184,7 @@ func (h *Hub) SelectWinner(roundID int64) {
 		h.Logger.Infof("Selected winner for round %d: %s", roundID, messageData["username"])
 	} else {
 		// Fallback if NATS is not available
-		winnerMessage := map[string]interface{}{
+		winnerMessage := map[string]any{
 			"version": "1.0",
 			"type":    "selected_text",
 			"data":    "Random winner selected for the round!",
@@ -202,8 +197,8 @@ func (h *Hub) SelectWinner(roundID int64) {
 // into JSON and publishes it to a NATS JetStream subject.
 // The subject is dynamically created based on the round ID (e.g., "winners.ROUND_ID").
 // Errors during marshaling or publishing are logged.
-func (h *Hub) publishWinnerToNATS(roundID int64, messageData map[string]interface{}) {
-	winnerData := map[string]interface{}{
+func (h *Hub) publishWinnerToNATS(roundID int64, messageData map[string]any) {
+	winnerData := map[string]any{
 		"round_id":  roundID,
 		"username":  messageData["username"],
 		"content":   messageData["content"],

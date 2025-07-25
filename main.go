@@ -4,8 +4,6 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
-	"time"
 
 	"github.com/erilali/internal/api"
 	"github.com/erilali/internal/hub"
@@ -38,9 +36,8 @@ func main() {
 		"file_path":   config.FilePath,
 	}).Info("Logger configuration details")
 
-	// Initialize random number generator (Go 1.20+ compatible)
-	randSource := rand.NewSource(time.Now().UnixNano())
-	_ = rand.New(randSource) // Assign to _ to indicate it's used for side effects (seeding the created generator)
+	// In Go 1.20+, the global random number generator in the math/rand package is
+	// automatically seeded. Explicit seeding is no longer necessary for most use cases.
 
 	// Use the new modularized API and Hub packages
 	api.StartServer(serverLogger, func(nc *nats.Conn, js nats.JetStreamContext, logger *logger.Logger) interface{} {
