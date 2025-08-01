@@ -71,16 +71,25 @@ func (h *Hub) Run() {
 			h.Mu.Unlock()
 
 		case message := <-h.Broadcast:
+			// To avoid holding the lock while sending on channels,
+			// we make a copy of the clients map.
 			h.Mu.Lock()
+			clientsToBroadcast := make([]*Client, 0, len(h.Clients))
 			for client := range h.Clients {
+				clientsToBroadcast = append(clientsToBroadcast, client)
+			}
+			h.Mu.Unlock()
+
+			for _, client := range clientsToBroadcast {
 				select {
 				case client.Send <- message:
 				default:
-					close(client.Send)
-					delete(h.Clients, client)
+					// Assume client is disconnected or slow.
+					// Let the read/write pumps handle the cleanup.
+					// We can trigger it by sending to the unregister channel.
+					h.Unregister <- client
 				}
 			}
-			h.Mu.Unlock()
 		}
 	}
 }

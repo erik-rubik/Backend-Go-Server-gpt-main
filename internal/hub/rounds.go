@@ -49,7 +49,7 @@ func (h *Hub) StartRound() {
 	h.Logger.Infof("Round %d started", h.CurrentRoundID)
 
 	// Start countdown
-	go h.StartCountdown()
+	go h.StartCountdown(h.CurrentRoundID)
 }
 
 // EndRound ends the current message round and selects a winner.
@@ -78,13 +78,17 @@ func (h *Hub) EndRound() {
 }
 
 // StartCountdown sends countdown messages to clients.
-func (h *Hub) StartCountdown() {
+func (h *Hub) StartCountdown(roundID int64) {
 	for i := countdownStartSeconds; i >= 1; i-- {
+		// Sleep first to have a delay before the first countdown message
+		time.Sleep(1 * time.Second)
+
 		h.Mu.Lock()
 		roundActive := h.RoundActive
+		currentRoundID := h.CurrentRoundID
 		h.Mu.Unlock()
 
-		if !roundActive {
+		if !roundActive || currentRoundID != roundID {
 			return
 		}
 
@@ -95,6 +99,5 @@ func (h *Hub) StartCountdown() {
 		}
 
 		h.BroadcastMessage(countdownMessage)
-		time.Sleep(1 * time.Second)
 	}
 }

@@ -105,14 +105,9 @@ func (h *Hub) SendErrorMessage(client *Client, errorMsg string) {
 	}
 
 	if data, err := json.Marshal(message); err == nil {
-		select {
-		case client.Send <- data:
-		default:
-			close(client.Send)
-			h.Mu.Lock()
-			delete(h.Clients, client)
-			h.Mu.Unlock()
-		}
+		// The WritePump has a deadline and will handle a slow client.
+		// Sending to client.Send will block until the WritePump is ready.
+		client.Send <- data
 	}
 }
 
@@ -127,14 +122,9 @@ func (h *Hub) SendAckMessage(client *Client) {
 	}
 
 	if data, err := json.Marshal(message); err == nil {
-		select {
-		case client.Send <- data:
-		default:
-			close(client.Send)
-			h.Mu.Lock()
-			delete(h.Clients, client)
-			h.Mu.Unlock()
-		}
+		// The WritePump has a deadline and will handle a slow client.
+		// Sending to client.Send will block until the WritePump is ready.
+		client.Send <- data
 	}
 }
 
