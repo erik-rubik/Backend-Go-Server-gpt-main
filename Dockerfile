@@ -24,8 +24,9 @@ FROM scratch
 # Copy the built binary from the builder stage
 COPY --from=builder /app/main .
 
-# Copy the logger configuration
+# Copy the logger configuration and test UI
 COPY logger_config.json .
+COPY test-ui.html .
 
 # Expose port 8080
 EXPOSE 8080

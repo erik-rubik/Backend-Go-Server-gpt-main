@@ -107,6 +107,15 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 		hubServer.ServeWs(w, r)
 	})
 
+	// Serve the test UI
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			http.ServeFile(w, r, "test-ui.html")
+		} else {
+			http.NotFound(w, r)
+		}
+	})
+
 	http.HandleFunc("/api/rounds/", func(w http.ResponseWriter, r *http.Request) {
 		if js == nil {
 			http.Error(w, "JetStream not available", http.StatusServiceUnavailable)
