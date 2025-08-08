@@ -3,12 +3,20 @@
 package hub
 
 import (
+	"encoding/json"
 	"sync"
 	"time"
 
 	"github.com/erilali/internal/logger"
 	"github.com/nats-io/nats.go"
 )
+
+// RoundMessage represents a message submitted during a round
+type RoundMessage struct {
+	Username  string    `json:"username"`
+	Message   string    `json:"message"`
+	Timestamp time.Time `json:"timestamp"`
+}
 
 // Hub represents the main hub that manages clients, rounds, and messaging
 type Hub struct {
@@ -22,9 +30,10 @@ type Hub struct {
 	NatsConn       *nats.Conn
 	Js             nats.JetStreamContext
 	StartTime      time.Time
-	CurrentRoundID int64           // current round ID (timestamp)
-	MessageLimiter map[string]bool // maps username to round submission status
-	Logger         *logger.Logger  // custom logger
+	CurrentRoundID int64                    // current round ID (timestamp)
+	MessageLimiter map[string]bool          // maps username to round submission status
+	RoundMessages  map[int64][]RoundMessage // stores messages by round ID
+	Logger         *logger.Logger           // custom logger
 }
 
 // NewHub creates a new Hub instance and initializes its fields.
@@ -42,6 +51,7 @@ func NewHub(nc *nats.Conn, js nats.JetStreamContext, logger *logger.Logger) *Hub
 		StartTime:      time.Now(),
 		CurrentRoundID: 0,
 		MessageLimiter: make(map[string]bool),
+		RoundMessages:  make(map[int64][]RoundMessage),
 		Logger:         logger,
 	}
 }
@@ -58,7 +68,20 @@ func (h *Hub) Run() {
 		case client := <-h.Register:
 			h.Mu.Lock()
 			h.Clients[client] = true
+			roundActive := h.RoundActive
+			currentRoundID := h.CurrentRoundID
 			h.Mu.Unlock()
+
+			// Send current round status to the newly connected client
+			if roundActive {
+				roundMessage := map[string]interface{}{
+					"version": "1.0",
+					"type":    "round_start",
+					"data":    currentRoundID,
+				}
+				h.sendMessageToClient(client, roundMessage)
+			}
+
 			h.Logger.Infof("Client registered: %s", client.Username)
 
 		case client := <-h.Unregister:
@@ -89,6 +112,57 @@ func (h *Hub) Run() {
 					// We can trigger it by sending to the unregister channel.
 					h.Unregister <- client
 				}
+			}
+		}
+	}
+}
+
+// sendMessageToClient sends a message directly to a specific client
+func (h *Hub) sendMessageToClient(client *Client, message map[string]interface{}) {
+	if data, err := json.Marshal(message); err == nil {
+		select {
+		case client.Send <- data:
+		default:
+			// Client is slow or disconnected, trigger cleanup
+			h.Unregister <- client
+		}
+	}
+}
+
+// addRoundMessage adds a message to the current round
+func (h *Hub) addRoundMessage(roundID int64, username, messageText string) {
+	h.Mu.Lock()
+	defer h.Mu.Unlock()
+
+	if h.RoundMessages[roundID] == nil {
+		h.RoundMessages[roundID] = make([]RoundMessage, 0)
+	}
+
+	roundMsg := RoundMessage{
+		Username:  username,
+		Message:   messageText,
+		Timestamp: time.Now(),
+	}
+
+	h.RoundMessages[roundID] = append(h.RoundMessages[roundID], roundMsg)
+}
+
+// cleanupOldMessages removes messages from rounds older than the specified number of rounds
+func (h *Hub) cleanupOldMessages(currentRoundID int64) {
+	h.Mu.Lock()
+	defer h.Mu.Unlock()
+
+	const keepRounds = 3
+	var roundIDs []int64
+	for id := range h.RoundMessages {
+		roundIDs = append(roundIDs, id)
+	}
+
+	if len(roundIDs) > keepRounds {
+		// Sort and keep only recent rounds
+		for _, id := range roundIDs {
+			if id < currentRoundID-int64(keepRounds-1) {
+				delete(h.RoundMessages, id)
 			}
 		}
 	}

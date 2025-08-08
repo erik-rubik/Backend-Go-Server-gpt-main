@@ -2,7 +2,6 @@
 package hub
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -37,8 +36,8 @@ func (h *Hub) StartRound() {
 	// Broadcast round start
 	roundMessage := map[string]interface{}{
 		"version": "1.0",
-		"type":    "round_info",
-		"data":    fmt.Sprintf("Round %d started! You have %.0f seconds to submit a message.", h.CurrentRoundID, roundDuration.Seconds()),
+		"type":    "round_start",
+		"data":    h.CurrentRoundID,
 	}
 
 	h.BroadcastMessage(roundMessage)
@@ -62,8 +61,8 @@ func (h *Hub) EndRound() {
 	// Broadcast round end
 	roundMessage := map[string]interface{}{
 		"version": "1.0",
-		"type":    "round_info",
-		"data":    fmt.Sprintf("Round %d ended!", roundID),
+		"type":    "round_end",
+		"data":    roundID,
 	}
 
 	h.BroadcastMessage(roundMessage)
@@ -79,25 +78,15 @@ func (h *Hub) EndRound() {
 
 // StartCountdown sends countdown messages to clients.
 func (h *Hub) StartCountdown(roundID int64) {
+	// Countdown text updates disabled per UI simplification request (graphical timer only)
 	for i := countdownStartSeconds; i >= 1; i-- {
-		// Sleep first to have a delay before the first countdown message
+		// Maintain timing alignment without broadcasting messages
 		time.Sleep(1 * time.Second)
-
 		h.Mu.Lock()
-		roundActive := h.RoundActive
-		currentRoundID := h.CurrentRoundID
-		h.Mu.Unlock()
-
-		if !roundActive || currentRoundID != roundID {
+		if !h.RoundActive || h.CurrentRoundID != roundID {
+			h.Mu.Unlock()
 			return
 		}
-
-		countdownMessage := map[string]interface{}{
-			"version": "1.0",
-			"type":    "countdown",
-			"data":    fmt.Sprintf("%d", i),
-		}
-
-		h.BroadcastMessage(countdownMessage)
+		h.Mu.Unlock()
 	}
 }

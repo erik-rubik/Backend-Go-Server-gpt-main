@@ -108,12 +108,16 @@ func StartServer(serverLogger *logger.Logger, hubFactory func(*nats.Conn, nats.J
 	})
 
 	// Serve the test UI
+	// Serve the UI at root and /ui for convenience
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 			http.ServeFile(w, r, "test-ui.html")
-		} else {
-			http.NotFound(w, r)
+			return
 		}
+		http.NotFound(w, r)
+	})
+	http.HandleFunc("/ui", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "test-ui.html")
 	})
 
 	http.HandleFunc("/api/rounds/", func(w http.ResponseWriter, r *http.Request) {

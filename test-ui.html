@@ -6,224 +6,339 @@
     <title>Go Backend Server Test UI</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 20px;
-            background-color: #f5f5f5;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
         .container {
-            max-width: 1200px;
+            max-width: 1000px;
             margin: 0 auto;
-            background-color: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
         }
-        .section {
+        
+        /* Timer Styles */
+        .timer-container {
+            text-align: center;
             margin-bottom: 30px;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+            padding: 20px;
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            color: white;
+            position: relative;
         }
-        .section h3 {
-            margin-top: 0;
+        .timer-circle {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 15px;
+            position: relative;
+        }
+        .timer-circle svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+        .timer-circle-bg {
+            fill: none;
+            stroke: rgba(255,255,255,0.3);
+            stroke-width: 8;
+        }
+        .timer-circle-progress {
+            fill: none;
+            stroke: #fff;
+            stroke-width: 8;
+            stroke-linecap: round;
+            transition: stroke-dasharray 0.1s ease-out;
+        }
+        .timer-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 28px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .timer-status {
+            font-size: 18px;
+            font-weight: 500;
+            margin-top: 10px;
+        }
+        
+        /* Winner Announcement Styles */
+        .winner-announcement {
+            background: linear-gradient(45deg, #ffd700, #ffed4e);
+            border: 3px solid #ffd700;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            text-align: center;
+            animation: glow 2s ease-in-out infinite alternate;
             color: #333;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 5px;
+            position: relative;
+            overflow: hidden;
         }
-        .input-group {
+        .winner-announcement::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shine 3s ease-in-out infinite;
+            pointer-events: none;
+        }
+        .winner-announcement h3 {
+            margin: 0 0 15px;
+            font-size: 28px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .winner-message {
+            background: rgba(255,255,255,0.9);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            font-style: italic;
+            font-size: 16px;
+            border-left: 5px solid #ffd700;
+        }
+        .winner-stats {
+            margin-top: 10px;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+        
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
+            50% { box-shadow: 0 0 25px rgba(255, 215, 0, 0.8); }
+        }
+        @keyframes shine {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+        }
+        
+        /* Status Styles */
+        .status {
+            padding: 12px 20px;
+            border-radius: 25px;
             margin: 10px 0;
+            font-weight: 600;
+            text-align: center;
+        }
+        .status.connected { 
+            background: linear-gradient(45deg, #4CAF50, #66BB6A);
+            color: white;
+        }
+        .status.disconnected { 
+            background: linear-gradient(45deg, #f44336, #ef5350);
+            color: white;
+        }
+        .status.round-active { 
+            background: linear-gradient(45deg, #2196F3, #42A5F5);
+            color: white;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        .status.round-inactive { 
+            background: linear-gradient(45deg, #FF9800, #FFB74D);
+            color: white;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+        
+        /* Input and Button Styles */
+        .input-group {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+            align-items: center;
+            flex-wrap: wrap;
         }
         .input-group label {
-            display: inline-block;
-            width: 120px;
-            font-weight: bold;
+            font-weight: 600;
+            color: #333;
+            min-width: 80px;
         }
-        .input-group input, .input-group button {
-            padding: 8px 12px;
-            margin: 2px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+        input, button {
+            padding: 12px 20px;
+            border: 2px solid #ddd;
+            border-radius: 25px;
+            font-size: 14px;
+            transition: all 0.3s ease;
         }
-        .input-group input {
-            width: 200px;
+        input {
+            flex: 1;
+            min-width: 200px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 10px rgba(102, 126, 234, 0.3);
         }
         button {
-            background-color: #007bff;
+            background: linear-gradient(45deg, #667eea, #764ba2);
             color: white;
-            border: none;
             cursor: pointer;
-            padding: 10px 15px;
-            border-radius: 4px;
+            border: none;
+            font-weight: 600;
+            min-width: 120px;
         }
-        button:hover {
-            background-color: #0056b3;
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
         }
         button:disabled {
-            background-color: #6c757d;
+            background: #ccc;
             cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
-        .disconnect {
-            background-color: #dc3545;
-        }
-        .disconnect:hover {
-            background-color: #c82333;
-        }
-        .status {
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 4px;
-            font-weight: bold;
-        }
-        .status.connected {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .status.disconnected {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .status.round-active {
-            background-color: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeaa7;
-        }
+        
+        /* Messages Styles */
         .messages {
-            height: 300px;
+            height: 350px;
             overflow-y: auto;
-            border: 1px solid #ddd;
-            padding: 10px;
-            background-color: #f8f9fa;
-            font-family: monospace;
-            font-size: 12px;
+            border: 2px solid #eee;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            background: #fafafa;
         }
         .message {
-            margin: 5px 0;
-            padding: 5px;
-            border-left: 3px solid #007bff;
-            background-color: white;
+            margin: 10px 0;
+            padding: 12px 18px;
+            background: white;
+            border-radius: 20px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+        .message:hover {
+            transform: translateX(5px);
         }
         .message.system {
-            border-left-color: #28a745;
-        }
-        .message.error {
-            border-left-color: #dc3545;
-            background-color: #f8d7da;
+            border-left-color: #4CAF50;
+            background: #f1f8e9;
         }
         .message.winner {
-            border-left-color: #ffc107;
-            background-color: #fff3cd;
+            border-left-color: #ffd700;
+            background: #fffde7;
         }
-        .api-response {
-            background-color: #f8f9fa;
-            border: 1px solid #ddd;
-            padding: 10px;
+        
+        /* Countdown Animation */
+        .countdown-message {
+            background: linear-gradient(45deg, #FF9800, #FFB74D);
+            color: white;
+            text-align: center;
+            padding: 15px;
             margin: 10px 0;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 12px;
-            white-space: pre-wrap;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        .flex-container {
-            display: flex;
-            gap: 20px;
-        }
-        .flex-item {
-            flex: 1;
-        }
-        .health-good {
-            color: #28a745;
+            border-radius: 25px;
             font-weight: bold;
+            font-size: 16px;
+            animation: countdown-pulse 1s ease-in-out;
         }
-        .health-bad {
-            color: #dc3545;
-            font-weight: bold;
+        
+        @keyframes countdown-pulse {
+            0% { transform: scale(1); opacity: 0; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.9; }
         }
-        .timestamp {
-            color: #6c757d;
-            font-size: 10px;
+        
+        /* Section Headers */
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 32px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                padding: 20px;
+            }
+            .input-group {
+                flex-direction: column;
+            }
+            .input-group input, .input-group button {
+                width: 100%;
+            }
+            .timer-circle {
+                width: 100px;
+                height: 100px;
+            }
+            .timer-text {
+                font-size: 24px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Go Backend Server Test UI</h1>
-        <p>This test UI allows you to interact with your WebSocket server, test round-based messaging, and examine the API endpoints.</p>
+        <h1>🎮 WebSocket Chat Game</h1>
         
-        <div class="flex-container">
-            <div class="flex-item">
-                <!-- WebSocket Connection Section -->
-                <div class="section">
-                    <h3>WebSocket Connection</h3>
-                    <div class="input-group">
-                        <label>Server URL:</label>
-                        <input type="text" id="serverUrl" value="ws://localhost:8080/ws" />
-                        <button onclick="detectServerUrl()">Auto-detect</button>
-                    </div>
-                    <div class="input-group">
-                        <label>Username:</label>
-                        <input type="text" id="username" value="testuser" />
-                    </div>
-                    <div class="input-group">
-                        <button id="connectBtn" onclick="connect()">Connect</button>
-                        <button id="disconnectBtn" onclick="disconnect()" disabled class="disconnect">Disconnect</button>
-                    </div>
-                    <div id="connectionStatus" class="status disconnected">Disconnected</div>
-                    <div id="roundStatus" class="status">Round Status: Unknown</div>
-                </div>
-
-                <!-- Messaging Section -->
-                <div class="section">
-                    <h3>Send Message</h3>
-                    <div class="input-group">
-                        <label>Message:</label>
-                        <input type="text" id="messageInput" placeholder="Enter your message" disabled />
-                        <button id="sendBtn" onclick="sendMessage()" disabled>Send</button>
-                    </div>
-                    <p><small>Note: You can only send one message per round, and only during active rounds.</small></p>
-                </div>
+        <!-- Timer Display -->
+        <div class="timer-container">
+            <div class="timer-circle">
+                <svg>
+                    <circle class="timer-circle-bg" cx="60" cy="60" r="52"></circle>
+                    <circle class="timer-circle-progress" cx="60" cy="60" r="52" id="timerProgress"></circle>
+                </svg>
+                <div class="timer-text" id="timerText">--</div>
             </div>
+            <div class="timer-status" id="timerStatus">Waiting for connection...</div>
+        </div>
 
-            <div class="flex-item">
-                <!-- API Testing Section -->
-                <div class="section">
-                    <h3>API Testing</h3>
-                    <div class="input-group">
-                        <label>Health Check:</label>
-                        <button onclick="checkHealth()">Check /health</button>
-                    </div>
-                    <div class="input-group">
-                        <label>Round ID:</label>
-                        <input type="text" id="roundId" placeholder="Enter round ID" />
-                        <button onclick="fetchRoundData()">Fetch /api/rounds/{id}</button>
-                    </div>
-                    <div id="apiResponse" class="api-response">API responses will appear here...</div>
-                </div>
-            </div>
+        <!-- Connection Controls -->
+        <div class="input-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" placeholder="Enter your username" value="testuser" maxlength="20">
+            <button onclick="connect()" id="connectBtn">🔌 Connect</button>
+            <button onclick="disconnect()" id="disconnectBtn" disabled>🔌 Disconnect</button>
+        </div>
+
+        <!-- Status Display -->
+        <div id="connectionStatus" class="status disconnected">Disconnected</div>
+        <div id="roundStatus" class="status round-inactive">No active round</div>
+
+        <!-- Winner Announcements -->
+        <div id="winners"></div>
+
+        <!-- Message Input -->
+        <div class="input-group">
+            <label for="messageInput">Message:</label>
+            <input type="text" id="messageInput" placeholder="Enter your message..." maxlength="500" disabled>
+            <button onclick="sendMessage()" id="sendButton" disabled>📤 Send Message</button>
         </div>
 
         <!-- Messages Display -->
-        <div class="section">
-            <h3>Real-time Messages</h3>
-            <div id="messages" class="messages">WebSocket messages will appear here...</div>
-            <button onclick="clearMessages()">Clear Messages</button>
-        </div>
+        <div id="messages" class="messages"></div>
 
         <!-- Instructions -->
-        <div class="section">
-            <h3>How to Use This Test UI</h3>
+        <div style="margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 10px; color: #666;">
+            <h4 style="margin-top: 0;">📋 How to Play:</h4>
             <ol>
-                <li><strong>Start your Go server:</strong> Make sure your backend server is running on port 8080</li>
-                <li><strong>Connect:</strong> Enter a username and click "Connect" to establish WebSocket connection</li>
-                <li><strong>Wait for round:</strong> The server runs rounds automatically. Wait for a "Round started" message</li>
-                <li><strong>Send messages:</strong> During active rounds, send messages to participate</li>
-                <li><strong>View winner:</strong> At the end of each round, a winner is announced</li>
-                <li><strong>Test API:</strong> Use the API section to check health and fetch round data</li>
-                <li><strong>Multiple clients:</strong> Open this page in multiple tabs with different usernames to simulate multiple users</li>
+                <li><strong>Connect:</strong> Enter a username and click Connect</li>
+                <li><strong>Wait for Round:</strong> Watch the timer for when a new round starts</li>
+                <li><strong>Submit Message:</strong> Send one message per round during the active period</li>
+                <li><strong>Watch for Winner:</strong> A random winner is selected from all submissions</li>
+                <li><strong>Have Fun:</strong> Each round lasts 15 seconds with automatic cycling!</li>
             </ol>
         </div>
     </div>
@@ -231,65 +346,69 @@
     <script>
         let socket = null;
         let isConnected = false;
-        let currentRoundId = null;
         let roundActive = false;
+        let roundStartTime = 0;
+        let roundDuration = 15000; // 15 seconds
+        let timerInterval = null;
+        let messageSent = false;
 
         function connect() {
-            const serverUrl = document.getElementById('serverUrl').value;
-            const username = document.getElementById('username').value;
-            
-            if (!username.trim()) {
+            const username = document.getElementById('username').value.trim();
+            if (!username) {
                 alert('Please enter a username');
                 return;
             }
 
-            // Validate username (3-20 chars, alphanumeric + underscore)
             if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-                alert('Invalid username: must be 3-20 characters, alphanumeric and underscore only');
+                alert('Username must be 3-20 characters, alphanumeric and underscore only');
                 return;
             }
 
-            const wsUrl = `${serverUrl}?username=${encodeURIComponent(username)}`;
+            // Build WS URL dynamically so it works in forwarded/devcontainer environments
+            const loc = window.location;
+            const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = loc.host; // includes port if any
+            const wsUrl = `${protocol}//${host}/ws?username=${encodeURIComponent(username)}`;
             
-            try {
-                socket = new WebSocket(wsUrl);
-                
-                socket.onopen = function(event) {
-                    isConnected = true;
-                    updateConnectionStatus('Connected', 'connected');
-                    document.getElementById('connectBtn').disabled = true;
-                    document.getElementById('disconnectBtn').disabled = false;
-                    document.getElementById('messageInput').disabled = false;
-                    document.getElementById('sendBtn').disabled = false;
-                    addMessage('SYSTEM', 'Connected to server', 'system');
-                };
-                
-                socket.onmessage = function(event) {
-                    try {
-                        const message = JSON.parse(event.data);
-                        handleWebSocketMessage(message);
-                    } catch (e) {
-                        addMessage('ERROR', 'Failed to parse message: ' + event.data, 'error');
-                    }
-                };
-                
-                socket.onclose = function(event) {
-                    isConnected = false;
-                    updateConnectionStatus('Disconnected', 'disconnected');
-                    document.getElementById('connectBtn').disabled = false;
-                    document.getElementById('disconnectBtn').disabled = true;
-                    document.getElementById('messageInput').disabled = true;
-                    document.getElementById('sendBtn').disabled = true;
-                    addMessage('SYSTEM', `Connection closed (Code: ${event.code})`, 'system');
-                };
-                
-                socket.onerror = function(error) {
-                    addMessage('ERROR', 'WebSocket error occurred', 'error');
-                };
-                
-            } catch (error) {
-                addMessage('ERROR', 'Failed to connect: ' + error.message, 'error');
-            }
+            socket = new WebSocket(wsUrl);
+            
+            socket.onopen = function(event) {
+                 isConnected = true;
+                 updateConnectionStatus('🟢 Connected', 'connected');
+                 document.getElementById('connectBtn').disabled = true;
+                 document.getElementById('disconnectBtn').disabled = false;
+                 document.getElementById('messageInput').disabled = false;
+                 document.getElementById('username').disabled = true;
+                 updateTimerStatus('Connected');
+             };
+            
+            socket.onmessage = function(event) {
+                try {
+                    const message = JSON.parse(event.data);
+                    handleServerMessage(message);
+                } catch (e) {
+                    console.error('Failed to parse message:', event.data);
+                    addMessage('System', 'Error: Invalid message from server', 'system');
+                }
+            };
+            
+            socket.onclose = function(event) {
+                 isConnected = false;
+                 roundActive = false;
+                 clearTimer();
+                 updateConnectionStatus('🔴 Disconnected', 'disconnected');
+                 updateRoundStatus('❌ No active round', 'round-inactive');
+                 document.getElementById('connectBtn').disabled = false;
+                 document.getElementById('disconnectBtn').disabled = true;
+                 document.getElementById('messageInput').disabled = true;
+                 document.getElementById('sendButton').disabled = true;
+                 document.getElementById('username').disabled = false;
+                 resetTimer();
+             };
+            
+            socket.onerror = function(error) {
+                // silent error
+             };
         }
 
         function disconnect() {
@@ -298,153 +417,245 @@
             }
         }
 
+        function handleServerMessage(message) {
+            switch (message.type) {
+                case 'round_start':
+                    handleRoundStart(message.data);
+                    break;
+                case 'round_end':
+                    handleRoundEnd(message.data);
+                    break;
+                case 'winner_announcement':
+                    handleWinnerAnnouncement(message);
+                    break;
+                case 'ack':
+                    break; // silent ack
+                case 'error':
+                    addMessage('Error', message.data, 'system');
+                    break;
+            }
+        }
+
+        function handleRoundStart(roundId) {
+             roundActive = true;
+             roundStartTime = Date.now();
+             messageSent = false;
+            updateRoundStatus('Round Active', 'round-active');
+            updateSendButton();
+             startTimer();
+         }
+
+         function handleRoundEnd(roundId) {
+             roundActive = false;
+            updateRoundStatus('Selecting winner...', 'round-inactive');
+             document.getElementById('sendButton').disabled = true;
+             clearTimer();
+         }
+
+        function handleWinnerAnnouncement(message) {
+            // Clear previous winner announcements
+            const winnersDiv = document.getElementById('winners');
+            winnersDiv.innerHTML = '';
+            
+            const winnerDiv = document.createElement('div');
+            winnerDiv.className = 'winner-announcement';
+            
+            if (message.winner) {
+                winnerDiv.innerHTML = `
+                    <h3>🏆 Round ${message.round_id} Winner! 🏆</h3>
+                    <div style="font-size: 20px; margin: 10px 0;">
+                        <strong>👑 ${message.winner.username}</strong>
+                    </div>
+                    <div class="winner-message">
+                        "${message.winner.message}"
+                    </div>
+                    <div class="winner-stats">
+                        📊 Total messages: ${message.total_messages}
+                    </div>
+                `;
+             } else {
+                winnerDiv.innerHTML = `
+                    <h3>📝 Round ${message.round_id} Complete</h3>
+                    <div style="font-size: 18px; margin: 15px 0;">
+                        ${message.message || 'No messages submitted this round'}
+                    </div>
+                `;
+             }
+            
+            winnersDiv.appendChild(winnerDiv);
+            
+            // Auto-remove winner announcement after 12 seconds
+            setTimeout(() => {
+                if (winnerDiv.parentNode) {
+                    winnerDiv.parentNode.removeChild(winnerDiv);
+                }
+            }, 12000);
+            
+            updateRoundStatus('⏳ Waiting for next round...', 'round-inactive');
+        }
+
+        function startTimer() {
+            clearTimer();
+            const timerText = document.getElementById('timerText');
+            const timerProgress = document.getElementById('timerProgress');
+            const circumference = 2 * Math.PI * 52; // radius = 52
+            
+            // Initialize progress circle
+            timerProgress.style.strokeDasharray = circumference;
+            timerProgress.style.strokeDashoffset = 0;
+            
+            timerInterval = setInterval(() => {
+                const elapsed = Date.now() - roundStartTime;
+                const remaining = Math.max(0, roundDuration - elapsed);
+                const seconds = Math.ceil(remaining / 1000);
+                
+                // Update timer text
+                timerText.textContent = seconds;
+                
+                // Update status
+                updateTimerStatus(`Round in progress - ${seconds}s remaining`);
+                
+                // Update progress circle
+                const progress = (roundDuration - remaining) / roundDuration;
+                const offset = circumference * (1 - progress);
+                timerProgress.style.strokeDashoffset = offset;
+                
+                // Change color as time runs out
+                if (seconds <= 5) {
+                    timerProgress.style.stroke = '#ff6b6b';
+                } else if (seconds <= 10) {
+                    timerProgress.style.stroke = '#ffa500';
+                } else {
+                    timerProgress.style.stroke = '#fff';
+                }
+                
+                if (remaining <= 0) {
+                    clearTimer();
+                    timerText.textContent = '0';
+                    updateTimerStatus('⏰ Round ended');
+                    timerProgress.style.stroke = '#ff6b6b';
+                }
+            }, 100);
+        }
+
+        function clearTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function resetTimer() {
+            clearTimer();
+            const timerText = document.getElementById('timerText');
+            const timerProgress = document.getElementById('timerProgress');
+            timerText.textContent = '--';
+            timerProgress.style.strokeDashoffset = 0;
+            timerProgress.style.stroke = '#fff';
+            updateTimerStatus('Waiting for round...');
+        }
+
         function sendMessage() {
             const messageInput = document.getElementById('messageInput');
             const message = messageInput.value.trim();
             
-            if (!message) {
-                alert('Please enter a message');
-                return;
-            }
-
             if (!isConnected) {
-                alert('Not connected to server');
+                alert('❌ Not connected to server');
                 return;
             }
-
+            
+            if (!message) {
+                alert('📝 Please enter a message');
+                return;
+            }
+            
             if (!roundActive) {
-                alert('No active round. Wait for the next round to start.');
+                alert('⏰ No active round. Wait for the next round to start.');
                 return;
             }
-
+            
+            if (messageSent) {
+                alert('✋ You have already sent a message this round');
+                return;
+            }
+            
             const clientMessage = {
                 version: "1.0",
-                type: "chat",
+                type: "client_message",
                 username: document.getElementById('username').value,
                 data: message
             };
-
+            
             try {
                 socket.send(JSON.stringify(clientMessage));
                 messageInput.value = '';
-                addMessage('SENT', `You: ${message}`, 'message');
-            } catch (error) {
-                addMessage('ERROR', 'Failed to send message: ' + error.message, 'error');
+                messageSent = true;
+                updateSendButton();
+                addMessage('You', message, 'message');
+                updateRoundStatus('Message locked in', 'round-active');
+             } catch (error) {
+                addMessage('Error', 'Failed to send', 'system');
+             }
+        }
+
+        function updateSendButton() {
+            const sendBtn = document.getElementById('sendButton');
+            if (!roundActive || messageSent) {
+                sendBtn.disabled = true;
+            } else {
+                sendBtn.disabled = false;
             }
         }
 
-        function handleWebSocketMessage(message) {
-            const timestamp = new Date().toISOString();
-            
-            switch (message.type) {
-                case 'round_start':
-                    roundActive = true;
-                    currentRoundId = message.data;
-                    updateRoundStatus(`Round Active (ID: ${currentRoundId})`, 'round-active');
-                    addMessage('ROUND', `Round started! ID: ${currentRoundId}`, 'system');
-                    break;
-                    
-                case 'round_end':
-                    roundActive = false;
-                    updateRoundStatus('Round Ended', 'disconnected');
-                    addMessage('ROUND', 'Round ended', 'system');
-                    break;
-                    
-                case 'chat':
-                    addMessage('CHAT', `${message.username}: ${message.data}`, 'message');
-                    break;
-                    
-                case 'winner':
-                    addMessage('WINNER', `🏆 Winner: ${message.username} - "${message.data}"`, 'winner');
-                    break;
-                    
-                case 'error':
-                    addMessage('ERROR', `Error (${message.error_code}): ${message.data}`, 'error');
-                    break;
-                    
-                default:
-                    addMessage('UNKNOWN', `Unknown message type: ${message.type}, data: ${JSON.stringify(message)}`, 'message');
-            }
-        }
-
-        function updateConnectionStatus(status, className) {
+        function updateConnectionStatus(text, className) {
             const statusDiv = document.getElementById('connectionStatus');
-            statusDiv.textContent = status;
+            statusDiv.textContent = text;
             statusDiv.className = `status ${className}`;
         }
 
-        function updateRoundStatus(status, className) {
-            const statusDiv = document.getElementById('roundStatus');
-            statusDiv.textContent = status;
-            statusDiv.className = `status ${className}`;
+        function updateRoundStatus(text, className) {
+            const roundStatusDiv = document.getElementById('roundStatus');
+            roundStatusDiv.textContent = text;
+            roundStatusDiv.className = `status ${className}`;
         }
 
-        function addMessage(type, content, className) {
+        function updateTimerStatus(text) {
+            document.getElementById('timerStatus').textContent = text;
+        }
+
+        function addMessage(username, message, type = 'message') {
             const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
-            const timestamp = new Date().toLocaleTimeString();
+            messageDiv.className = `message ${type}`;
             
-            messageDiv.className = `message ${className}`;
-            messageDiv.innerHTML = `<span class="timestamp">[${timestamp}]</span> <strong>${type}:</strong> ${content}`;
+            const timestamp = new Date().toLocaleTimeString();
+            messageDiv.innerHTML = `<strong>${username}:</strong> ${message} <small style="opacity: 0.6;">[${timestamp}]</small>`;
             
             messagesDiv.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            const messagesDiv = document.getElementById('messages');
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        function clearMessages() {
-            document.getElementById('messages').innerHTML = '';
-        }
-
-        async function checkHealth() {
-            try {
-                const response = await fetch('/health');
-                const data = await response.json();
-                document.getElementById('apiResponse').textContent = JSON.stringify(data, null, 2);
-            } catch (error) {
-                document.getElementById('apiResponse').textContent = `Error: ${error.message}`;
-            }
-        }
-
-        async function fetchRoundData() {
-            const roundId = document.getElementById('roundId').value.trim();
-            
-            if (!roundId) {
-                alert('Please enter a round ID');
-                return;
-            }
-
-            try {
-                const response = await fetch(`/api/rounds/${encodeURIComponent(roundId)}`);
-                const data = await response.json();
-                document.getElementById('apiResponse').textContent = JSON.stringify(data, null, 2);
-            } catch (error) {
-                document.getElementById('apiResponse').textContent = `Error: ${error.message}`;
-            }
-        }
-
-        // Allow sending message with Enter key
-        document.getElementById('messageInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
+        // Allow Enter key to send message
+        document.getElementById('messageInput').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
                 sendMessage();
             }
         });
 
-        // Add some helpful info on page load
-        window.onload = function() {
-            // Auto-detect server URL based on current page
-            detectServerUrl();
-            
-            addMessage('INFO', 'Welcome to the Go Backend Server Test UI', 'system');
-            addMessage('INFO', 'Server URL auto-detected. Adjust if needed.', 'system');
-            addMessage('INFO', 'Enter a username and click Connect to start testing', 'system');
-        };
+        // Allow Enter key to connect
+        document.getElementById('username').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                connect();
+            }
+        });
 
-        function detectServerUrl() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.host;
-            const wsUrl = `${protocol}//${host}/ws`;
-            document.getElementById('serverUrl').value = wsUrl;
-        }
+        // Initialize on page load
+        window.addEventListener('load', function() {});
     </script>
 </body>
 </html>

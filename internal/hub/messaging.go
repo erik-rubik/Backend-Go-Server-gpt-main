@@ -81,17 +81,24 @@ func (h *Hub) HandleClientMessage(client *Client, message map[string]interface{}
 	}
 }
 
-// ProcessMessage takes a valid client message during an active round, sends an acknowledgment
-// to the client, publishes the message to NATS for persistence and further processing,
-// and logs the message.
+// ProcessMessage takes a valid client message during an active round, stores it,
+// broadcasts it to all clients, publishes to NATS, and logs the message.
 func (h *Hub) ProcessMessage(client *Client, content string) {
-	// Send acknowledgment
-	h.SendAckMessage(client)
+	h.Mu.Lock()
+	currentRoundID := h.CurrentRoundID
+	h.Mu.Unlock()
+
+	// Store the message for winner selection
+	h.addRoundMessage(currentRoundID, client.Username, content)
+
+	// No broadcast of individual messages – only the winning message is ever shown to everyone.
+	// Optionally still acknowledge the sender locally so they know it was accepted.
+	h.SendAckMessage(client) // Keep per-user ack (not broadcast)
 
 	// Publish to NATS if available
 	h.publishMessageToNATS(client, content)
 
-	h.Logger.Infof("Message from %s: %s", client.Username, content)
+	h.Logger.Infof("Message from %s in round %d: %s", client.Username, currentRoundID, content)
 }
 
 // SendErrorMessage constructs and sends an error message to a specific client.
